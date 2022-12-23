@@ -93,6 +93,11 @@ def get_chain():
     return jsonify(response),200
 
 
+@app.route('/check_chain_valid', methods = ['GET'])
+def check_chain_valid():
+    response = {'valid': blockchain.is_chain_valid(blockchain.chain)}
+    return jsonify(response),200
+
 #run the app
 app.run(host = '0.0.0.0',port = 5000)
 
