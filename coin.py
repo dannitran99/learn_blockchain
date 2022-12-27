@@ -19,6 +19,7 @@ class Blockchain:
         self.chain = []
         self.transactions = []
         self.create_block(proof = 1, previous_hash = '0')
+        self.nodes = set()
 
     def create_block(self, proof, previous_hash):
         block = {'index': len(self.chain) + 1,
@@ -70,6 +71,28 @@ class Blockchain:
                                   'amount': amount})
         previous_block = self.get_previous_block()
         return previous_block['index'] + 1
+    
+    #create node in blockchain network
+    
+    def add_node(self, address):
+        parsed_url = urlparse(address)
+        self.nodes.add(parsed_url.netloc)
+        
+    def replace_chain(self):
+        network = self.nodes
+        longest_chain = None
+        max_length = len(self.chain)
+        for node in network:
+            response = requests.get(f'http://{node}/get_chain')
+            if response.status_code == 200:
+                length = response.json()['length']
+                chain = response.json()['chain']
+                if length > max_length and self.is_chain_valid(chain):
+                    max_length = length
+                    longest_chain = chain
+        if longest_chain:
+            self.chain = longest_chain
+            return True
 
 #minning blockchain
 
@@ -77,6 +100,9 @@ class Blockchain:
 
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
+
+#creating an address for the node on port 5000
+node_address = str(uuid4()).replace('-','')
 
 # create blockchain
 blockchain = Blockchain()
@@ -89,12 +115,14 @@ def mine_block():
     previous_proof = previous_block['proof']
     proof = blockchain.proof_of_work(previous_proof)
     previous_hash = blockchain.hash(previous_block)
+    blockchain.add_transaction(sender = node_address, receiver = 'me', amount = 10000)
     block = blockchain.create_block(proof, previous_hash)
     response = {'message':'mine done!',
                 'index':block['index'],
                 'timestamp':block['timestamp'],
                 'proof':block['proof'],
-                'previous_hash':block['previous_hash']}
+                'previous_hash':block['previous_hash'],
+                'transactions':block['transactions']}
     return jsonify(response),200
 
 #getting the chain
@@ -110,6 +138,29 @@ def get_chain():
 def check_chain_valid():
     response = {'valid': blockchain.is_chain_valid(blockchain.chain)}
     return jsonify(response),200
+
+@app.route('/add_transaction', methods = ['POST'])
+def add_transaction():
+    json = request.get_json()
+    transaction_keys = ['sender', 'receiver', 'amount']
+    if not all ( key in json for key in transaction_keys):
+        return 'some elements are missing!' , 400
+    index = blockchain.add_transaction( json['sender'], json['receiver'], json['amount'])
+    response = {'message': f'this transaction will be add to block {index}'}
+    return jsonify(response), 201
+    
+
+@app.route('/connect_node', methods = ['POST'])
+def connect_node():
+    json = request.get_json()
+    nodes = json.get('nodes')
+    if nodes is None :
+        return "no node", 400
+    for node in nodes:
+        blockchain.add_node(node)
+    response = {'message':'all nodes are now connected','total_nodes':list(blockchain.nodes)}
+    return jsonify(response), 201
+    
 
 #run the app
 app.run(host = '0.0.0.0',port = 5000)
@@ -130,7 +181,7 @@ app.run(host = '0.0.0.0',port = 5000)
 
 #3. Please add the modification to your code: 
 
-# Creating a Web App
+# Creating a Web App53
 #app = Flask(__name__)
 #app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
 
